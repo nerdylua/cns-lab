@@ -1,102 +1,102 @@
 #include <iostream>
 #include <string>
 #include <cctype>
-#include <limits>
 using namespace std;
 
-string caesar(const string& text, int shift, bool encrypt) {
-    string out;
-    shift = ((shift % 26) + 26) % 26;
-    if (!encrypt) shift = (26 - shift) % 26;
-    for (char ch : text) {
-        if (!isalpha((unsigned char)ch)) { out += ch; continue; }
+string caesar(string s, int k) {
+    k = (k % 26 + 26) % 26;
+    for (char& ch : s) {
+        if (!isalpha((unsigned char)ch)) continue;
         char b = isupper((unsigned char)ch) ? 'A' : 'a';
-        out += char(b + (ch - b + shift) % 26);
+        ch = char(b + (ch - b + k) % 26);
+    }
+    return s;
+}
+
+char norm(char ch) {
+    if (!isalpha((unsigned char)ch)) return 0;
+    ch = char(toupper((unsigned char)ch));
+    return ch == 'J' ? 'I' : ch;
+}
+
+string onlyAZ(const string& s) {
+    string out;
+    for (char ch : s) {
+        char n = norm(ch);
+        if (n) out += n;
     }
     return out;
 }
 
-struct Playfair {
-    char g[5][5];
-    int r[26] = {}, c[26] = {};
+void buildSquare(const string& key, char g[5][5], int pos[26]) {
+    bool used[26] = {};
+    used['J' - 'A'] = true;
+    string seq;
 
-    static char norm(char ch) {
-        if (!isalpha((unsigned char)ch)) return '\0';
-        ch = char(toupper((unsigned char)ch));
-        return ch == 'J' ? 'I' : ch;
+    for (char ch : key) {
+        char n = norm(ch);
+        if (n && !used[n - 'A']) used[n - 'A'] = true, seq += n;
     }
+    for (char ch = 'A'; ch <= 'Z'; ++ch) if (!used[ch - 'A']) seq += ch;
+    for (int i = 0; i < 25; ++i) g[i / 5][i % 5] = seq[i], pos[seq[i] - 'A'] = i;
+}
 
-    static string clean(const string& text) {
-        string s;
-        for (char ch : text) {
-            char n = norm(ch);
-            if (n) s += n;
-        }
+string prepPlayfair(string s, bool enc) {
+    s = onlyAZ(s);
+    if (!enc) {
+        if (s.size() % 2) s += 'X';
         return s;
     }
 
-    void build(const string& key) {
-        bool used[26] = {};
-        used['J' - 'A'] = true;
-        string seq;
-        for (char ch : key) {
-            char n = norm(ch);
-            if (n && !used[n - 'A']) used[n - 'A'] = true, seq += n;
-        }
-        for (char ch = 'A'; ch <= 'Z'; ch++) if (!used[ch - 'A']) seq += ch;
-        for (int i = 0; i < 25; i++) g[i / 5][i % 5] = seq[i], r[seq[i] - 'A'] = i / 5, c[seq[i] - 'A'] = i % 5;
+    string out;
+    for (size_t i = 0; i < s.size();) {
+        char a = s[i], b = (i + 1 < s.size()) ? s[i + 1] : 'X';
+        if (a == b) out += a, out += 'X', ++i;
+        else out += a, out += b, i += 2;
     }
+    if (out.size() % 2) out += 'X';
+    return out;
+}
 
-    string prep(const string& text, bool encrypt) {
-        string s = clean(text), out;
-        if (!encrypt) {
-            if (s.size() % 2) s += 'X';
-            return s;
-        }
-        for (size_t i = 0; i < s.size();) {
-            char a = s[i], b = (i + 1 < s.size()) ? s[i + 1] : 'X';
-            if (a == b) out += a, out += 'X', i += 1;
-            else out += a, out += b, i += 2;
-        }
-        if (out.size() % 2) out += 'X';
-        return out;
-    }
+string playfair(const string& text, const string& key, bool enc) {
+    char g[5][5];
+    int pos[26] = {};
+    buildSquare(key, g, pos);
 
-    string run(const string& text, bool encrypt) {
-        string p = prep(text, encrypt), out;
-        int d = encrypt ? 1 : 4;
-        for (size_t i = 0; i < p.size(); i += 2) {
-            int r1 = r[p[i] - 'A'], c1 = c[p[i] - 'A'];
-            int r2 = r[p[i + 1] - 'A'], c2 = c[p[i + 1] - 'A'];
-            if (r1 == r2) out += g[r1][(c1 + d) % 5], out += g[r2][(c2 + d) % 5];
-            else if (c1 == c2) out += g[(r1 + d) % 5][c1], out += g[(r2 + d) % 5][c2];
-            else out += g[r1][c2], out += g[r2][c1];
-        }
-        return out;
+    string p = prepPlayfair(text, enc), out;
+    int d = enc ? 1 : 4;
+    for (size_t i = 0; i < p.size(); i += 2) {
+        int a = pos[p[i] - 'A'], b = pos[p[i + 1] - 'A'];
+        int r1 = a / 5, c1 = a % 5, r2 = b / 5, c2 = b % 5;
+
+        if (r1 == r2) out += g[r1][(c1 + d) % 5], out += g[r2][(c2 + d) % 5];
+        else if (c1 == c2) out += g[(r1 + d) % 5][c1], out += g[(r2 + d) % 5][c2];
+        else out += g[r1][c2], out += g[r2][c1];
     }
-};
+    return out;
+}
 
 int main() {
-    int ch, mode;
-    string text;
-    cout << "1. Caesar 2. Playfair: ";
-    if (!(cin >> ch) || (ch != 1 && ch != 2)) return 1;
-    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    int algo, mode;
+    string text, key;
+    cout << "1 Caesar 2 Playfair: ";
+    cin >> algo;
+    cin.ignore();
 
-    cout << "Text: "; getline(cin, text);
-    cout << "1 = Encrypt 2 = Decrypt: ";
-    if (!(cin >> mode) || (mode != 1 && mode != 2)) return 1;
-    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    cout << "Text: ";
+    getline(cin, text);
+    cout << "1 Encrypt 2 Decrypt: ";
+    cin >> mode;
+    cin.ignore();
 
-    if (ch == 1) {
+    if (algo == 1) {
         int shift;
         cout << "Shift: ";
-        if (!(cin >> shift)) return 1;
-        cout << caesar(text, shift, mode == 1) << "\n";
+        cin >> shift;
+        cout << caesar(text, mode == 1 ? shift : -shift) << "\n";
     } else {
-        string key;
-        cout << "Key: "; getline(cin, key);
-        Playfair pf; pf.build(key);
-        cout << pf.run(text, mode == 1) << "\n";
+        cout << "Key: ";
+        getline(cin, key);
+        cout << playfair(text, key, mode == 1) << "\n";
     }
 }
